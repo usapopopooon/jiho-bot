@@ -84,9 +84,11 @@ class _IntervalSelect(discord.ui.Select["_IntervalSettingView"]):
         # Wake the scheduler so the new cadence takes effect on the next
         # boundary instead of waiting out the previous (longer) sleep.
         self._scheduler.wake()
+        # Public so the rest of the channel sees the change. The dropdown
+        # itself is still ephemeral (only the picker sees it) — this is
+        # the post-pick announcement.
         await interaction.response.send_message(
             f"時報の間隔を「{_interval_label(minutes)}」に変更しました。",
-            ephemeral=True,
         )
         # Cue the change in VC if connected. ``play_clip`` is best-effort
         # — a missing wav (e.g. user re-deployed without re-rendering)
@@ -234,12 +236,12 @@ class JihoBot(commands.Bot):
             return
 
         if self.voice_manager.is_connected(guild.id):
-            await interaction.response.defer(ephemeral=True, thinking=True)
+            await interaction.response.defer(thinking=True)
             await self.voice_manager.disconnect(guild.id)
             # If this was the only fine-cadence guild, the scheduler can
             # now sleep longer. ``wake()`` is cheap and idempotent.
             self.scheduler.wake()
-            await interaction.followup.send("切断しました。", ephemeral=True)
+            await interaction.followup.send("切断しました。")
             return
 
         # Connect — invoker must be in a voice channel.
@@ -252,7 +254,11 @@ class JihoBot(commands.Bot):
             )
             return
 
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        # The connect attempt is public-facing (the bot enters a VC, others
+        # will see it), so don't defer ephemerally — the connection-failed
+        # message below stays ephemeral on purpose because it's a private
+        # error to the invoker.
+        await interaction.response.defer(thinking=True)
         ok = await self.voice_manager.connect(channel)
         if not ok:
             await interaction.followup.send(
@@ -267,7 +273,6 @@ class JihoBot(commands.Bot):
         await interaction.followup.send(
             f"#{channel.name} に接続しました。現在の間隔: "
             f"「{_interval_label(current)}」 (`/setting` で変更できます)",
-            ephemeral=True,
         )
         # Greet the channel after the followup is on its way so the
         # spinner doesn't hang while audio plays. ``play_clip`` is
