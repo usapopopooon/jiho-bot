@@ -1,0 +1,53 @@
+[project]
+name = "jiho-bot"
+version = "0.1.0"
+description = "Discord time-signal bot — plays pre-rendered Zundamon WAVs on the hour"
+requires-python = "==3.12.*"
+dependencies = [
+    # ``[voice]`` pulls PyNaCl for legacy XSalsa20 modes, but Discord now
+    # negotiates DAVE on most voice connections — and refuses (close 4017)
+    # when the bot can't speak the protocol. discord.py 2.7+ added DAVE
+    # support via the ``davey`` extension.
+    "discord.py[voice]>=2.7.0",
+    "davey>=0.1.0",
+    "pydantic~=2.10.0",
+    "pydantic-settings~=2.7.0",
+]
+
+[project.optional-dependencies]
+# ``gen`` is for the local-only WAV generation script — needs aiohttp to
+# talk to a running VOICEVOX engine. Server deploys don't need it.
+gen = [
+    "aiohttp~=3.10",
+]
+dev = [
+    "pytest~=8.0",
+    "pytest-asyncio~=0.23",
+    "ruff~=0.9.0",
+    "mypy~=1.15",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "ARG", "SIM", "ASYNC"]
+ignore = ["B008", "ARG002", "ASYNC109"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

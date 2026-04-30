@@ -1,0 +1,46 @@
+# One-shot WAV generation pipeline:
+#
+#   docker compose -f docker-compose.gen.yml up --build \
+#       --abort-on-container-exit --exit-code-from gen
+#
+# Brings up VOICEVOX, runs scripts/generate_voices.py against it, drops the
+# rendered .wav files into ./voices on the host, then everything exits.
+# Re-running is cheap: existing wavs are skipped (pass GEN_ARGS=--force to
+# overwrite).
+
+services:
+  voicevox:
+    image: voicevox/voicevox_engine:cpu-latest
+    # No healthcheck — the generator script retries the /version probe at
+    # startup until the engine answers (see ``--wait-seconds``), which is
+    # robust without requiring curl/wget inside the engine image.
+
+  gen:
+    build:
+      context: .
+      dockerfile: Dockerfile.gen
+    depends_on:
+      - voicevox
+    environment:
+      VOICEVOX_URL: http://voicevox:50021
+    volumes:
+      # Output lands directly in the repo's ./voices, so the generated
+      # files are immediately picked up by the bot's docker-compose.yml.
+      - ./voices:/app/voices
+    # GEN_ARGS lets users pass extra flags without editing this file:
+    #   GEN_ARGS="--force --speaker 1" docker compose -f docker-compose.gen.yml up ...
+    #
+    # Dockerfile.gen sets ENTRYPOINT to ``python scripts/generate_voices.py``,
+    # which would prepend itself before our ``sh -c`` here and turn the whole
+    # shell invocation into a positional argv (argparse then errors with
+    # "unrecognized arguments: sh -c ..."). Clearing the entrypoint here lets
+    # ``sh`` actually run the command with ${GEN_ARGS} expansion.
+    entrypoint: []
+    command:
+      - sh
+      - -c
+      - >-
+        python scripts/generate_voices.py
+        --engine http://voicevox:50021
+        --wait-seconds 90
+        ${GEN_ARGS:-}

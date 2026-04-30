@@ -1,0 +1,14 @@
+services:
+  bot:
+    build: .
+    environment:
+      # ``DISCORD_TOKEN`` (single) and ``DISCORD_TOKENS`` (CSV) are both
+      # accepted by ``src.config``; pass whichever the user set. The
+      # ``:?`` guard lives only on the singular so multi-bot users (who
+      # leave ``DISCORD_TOKEN`` empty) don't trip it.
+      DISCORD_TOKEN: ${DISCORD_TOKEN:-}
+      DISCORD_TOKENS: ${DISCORD_TOKENS:-}
+      DISCORD_GUILD_IDS: ${DISCORD_GUILD_IDS:-}
+      JIHO_TIMEZONE: ${JIHO_TIMEZONE:-Asia/Tokyo}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
