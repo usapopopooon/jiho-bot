@@ -108,12 +108,27 @@ class JihoScheduler:
         Idempotent and cheap: callers don't need to track whether the
         scheduler actually changed cadence as a result.
         """
+        logger.info("jiho wake requested")
         self._wake.set()
 
     def start(self) -> None:
         if self._task is not None and not self._task.done():
             return
+        logger.info("jiho scheduler.start() — creating task")
         self._task = asyncio.create_task(self._run(), name="jiho-scheduler")
+        # Surface unhandled exceptions: without this, a crash inside _run
+        # disappears silently — asyncio only prints "Task exception was
+        # never retrieved" to stderr, which Docker / Railway logs may
+        # swallow. Cancellation is normal shutdown, ignore it.
+        self._task.add_done_callback(self._on_task_done)
+
+    @staticmethod
+    def _on_task_done(task: asyncio.Task[None]) -> None:
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("jiho scheduler task crashed", exc_info=exc)
 
     async def stop(self) -> None:
         if self._task is None:
@@ -130,7 +145,7 @@ class JihoScheduler:
                 now = datetime.now(self._tz)
                 interval = self._voice_manager.min_interval()
                 wait = seconds_until_next_tick(now, interval)
-                logger.debug("jiho sleep %.1fs (interval=%d)", wait, interval)
+                logger.info("jiho sleep %.1fs (interval=%d)", wait, interval)
                 # Sleep until either the boundary fires (TimeoutError) or
                 # ``wake()`` was called from outside (Event set). On wake
                 # we just recompute — *don't* fire, because the wait
