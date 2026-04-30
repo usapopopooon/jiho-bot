@@ -193,3 +193,35 @@ async def test_scheduler_start_stop_idempotent() -> None:
     await asyncio.sleep(0)
     await sched.stop()
     await sched.stop()
+
+
+@pytest.mark.asyncio
+async def test_scheduler_wake_recomputes_without_firing() -> None:
+    """``wake()`` must short-circuit the long sleep but **not** fire — a
+    setting-change shouldn't trigger an unscheduled time signal.
+
+    Regression: before the wake-event fix, /setting changes mid-sleep
+    waited out the previous (longer) interval. Now ``wake()`` causes the
+    loop to re-read ``min_interval`` immediately and resume sleeping
+    against the new cadence.
+    """
+    vm = MagicMock()
+    # min_interval starts at 60 (long sleep), then drops to 10 after wake.
+    intervals = iter([60, 10, 10, 10])
+    vm.min_interval = MagicMock(side_effect=lambda: next(intervals))
+    vm.eligible_at = MagicMock(return_value=[])
+    vm.play_clip = AsyncMock()
+
+    sched = JihoScheduler(vm, JST)
+    sched.start()
+    # Let the loop enter its first wait_for. A tick of the event loop is
+    # enough since the underlying sleep is huge.
+    await asyncio.sleep(0)
+    # Trigger wake: scheduler should clear the event and recompute
+    # without firing (no eligible_at call should hit play_clip).
+    sched.wake()
+    await asyncio.sleep(0)
+    await sched.stop()
+    vm.play_clip.assert_not_called()
+    # And we recomputed at least twice — once on entry, once after wake.
+    assert vm.min_interval.call_count >= 2

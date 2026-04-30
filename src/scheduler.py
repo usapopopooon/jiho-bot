@@ -95,6 +95,20 @@ class JihoScheduler:
         self._voice_manager = voice_manager
         self._tz = timezone
         self._task: asyncio.Task[None] | None = None
+        # Set whenever something happens that could change the wait
+        # cadence (``/setting`` change, connect, disconnect). The run
+        # loop wakes early, clears it, and recomputes — without this,
+        # a fresh ``/setting`` sleeps through up to one full hour
+        # before taking effect.
+        self._wake = asyncio.Event()
+
+    def wake(self) -> None:
+        """Ask the run loop to recompute its sleep deadline now.
+
+        Idempotent and cheap: callers don't need to track whether the
+        scheduler actually changed cadence as a result.
+        """
+        self._wake.set()
 
     def start(self) -> None:
         if self._task is not None and not self._task.done():
@@ -114,13 +128,21 @@ class JihoScheduler:
         try:
             while True:
                 now = datetime.now(self._tz)
-                # Re-check every iteration so a fresh ``/setting`` change
-                # propagates at the next tick. Worst case the just-toggled
-                # guild misses one boundary — its next one (≤10 min) covers.
                 interval = self._voice_manager.min_interval()
                 wait = seconds_until_next_tick(now, interval)
                 logger.debug("jiho sleep %.1fs (interval=%d)", wait, interval)
-                await asyncio.sleep(wait)
+                # Sleep until either the boundary fires (TimeoutError) or
+                # ``wake()`` was called from outside (Event set). On wake
+                # we just recompute — *don't* fire, because the wait
+                # might have been shortened. Without this, /setting
+                # changes mid-sleep wait through the previous interval.
+                try:
+                    await asyncio.wait_for(self._wake.wait(), timeout=wait)
+                    self._wake.clear()
+                    logger.debug("jiho woken — recomputing")
+                    continue
+                except TimeoutError:
+                    pass
                 fire_at = datetime.now(self._tz)
                 await self._fire(fire_at)
         except asyncio.CancelledError:

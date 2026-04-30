@@ -34,7 +34,13 @@ def _interval_label(minutes: int) -> str:
 class _IntervalSelect(discord.ui.Select["_IntervalSettingView"]):
     """Dropdown for ``/setting`` — picks the per-guild firing interval."""
 
-    def __init__(self, voice_manager: VoiceManager, guild_id: int, current: int):
+    def __init__(
+        self,
+        voice_manager: VoiceManager,
+        scheduler: JihoScheduler,
+        guild_id: int,
+        current: int,
+    ):
         options = [
             discord.SelectOption(
                 label=label,
@@ -50,6 +56,7 @@ class _IntervalSelect(discord.ui.Select["_IntervalSettingView"]):
             options=options,
         )
         self._voice_manager = voice_manager
+        self._scheduler = scheduler
         self._guild_id = guild_id
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -74,6 +81,9 @@ class _IntervalSelect(discord.ui.Select["_IntervalSettingView"]):
             )
             await interaction.response.send_message("無効な値です。", ephemeral=True)
             return
+        # Wake the scheduler so the new cadence takes effect on the next
+        # boundary instead of waiting out the previous (longer) sleep.
+        self._scheduler.wake()
         await interaction.response.send_message(
             f"時報の間隔を「{_interval_label(minutes)}」に変更しました。",
             ephemeral=True,
@@ -88,11 +98,17 @@ class _IntervalSelect(discord.ui.Select["_IntervalSettingView"]):
 class _IntervalSettingView(discord.ui.View):
     """Container for the dropdown so the timeout disables the select."""
 
-    def __init__(self, voice_manager: VoiceManager, guild_id: int, current: int):
+    def __init__(
+        self,
+        voice_manager: VoiceManager,
+        scheduler: JihoScheduler,
+        guild_id: int,
+        current: int,
+    ):
         # 120s timeout: long enough to read the message and click, short
         # enough that abandoned panels don't linger as live components.
         super().__init__(timeout=120)
-        self.add_item(_IntervalSelect(voice_manager, guild_id, current))
+        self.add_item(_IntervalSelect(voice_manager, scheduler, guild_id, current))
 
 
 class JihoBot(commands.Bot):
@@ -152,6 +168,54 @@ class JihoBot(commands.Bot):
     async def on_ready(self) -> None:
         logger.info("bot ready as %s (guilds=%d)", self.user, len(self.guilds))
 
+    async def on_voice_state_update(
+        self,
+        member: discord.Member,
+        before: discord.VoiceState,
+        after: discord.VoiceState,
+    ) -> None:
+        """Auto-disconnect when the last human leaves the bot's VC.
+
+        Without this, the bot would broadcast to an empty channel forever
+        after everyone goes to bed. We don't say goodbye — just leave
+        quietly. Triggered for the *human's* state change, not the bot's,
+        so we early-return on our own id.
+        """
+        if self.user is None or member.id == self.user.id:
+            return
+        if not self.voice_manager.is_connected(member.guild.id):
+            return
+
+        # Find the channel the bot is sitting in for this guild. Reading
+        # via ``member.guild.voice_client`` is authoritative — our own
+        # ``VoiceManager`` only caches a wrapper, which can lag the live
+        # voice state during reconnects.
+        voice_client = member.guild.voice_client
+        bot_channel = getattr(voice_client, "channel", None)
+        if bot_channel is None:
+            return
+
+        # We only care when someone *left* (or moved away from) our
+        # channel. Joining, mute toggles, camera flips all leave
+        # ``before.channel == after.channel`` and don't matter here.
+        if before.channel != bot_channel or after.channel == bot_channel:
+            return
+
+        humans_left = [m for m in bot_channel.members if not m.bot]
+        if humans_left:
+            return
+
+        logger.info(
+            "auto-disconnect: last human left guild=%s channel=%s",
+            member.guild.id,
+            bot_channel.id,
+        )
+        await self.voice_manager.disconnect(member.guild.id)
+        # Disconnect can raise min_interval (this guild may have been
+        # the only 10-min subscriber). Wake the scheduler so it stops
+        # waking too often unnecessarily.
+        self.scheduler.wake()
+
     async def close(self) -> None:
         await self.scheduler.stop()
         await self.voice_manager.disconnect_all()
@@ -172,6 +236,9 @@ class JihoBot(commands.Bot):
         if self.voice_manager.is_connected(guild.id):
             await interaction.response.defer(ephemeral=True, thinking=True)
             await self.voice_manager.disconnect(guild.id)
+            # If this was the only fine-cadence guild, the scheduler can
+            # now sleep longer. ``wake()`` is cheap and idempotent.
+            self.scheduler.wake()
             await interaction.followup.send("切断しました。", ephemeral=True)
             return
 
@@ -193,6 +260,9 @@ class JihoBot(commands.Bot):
                 ephemeral=True,
             )
             return
+        # Connecting can lower min_interval (e.g. this guild had 10-min
+        # set previously and was disconnected). Recompute now.
+        self.scheduler.wake()
         current = self.voice_manager.get_interval(guild.id)
         await interaction.followup.send(
             f"#{channel.name} に接続しました。現在の間隔: "
@@ -216,7 +286,9 @@ class JihoBot(commands.Bot):
             )
             return
         current = self.voice_manager.get_interval(guild.id)
-        view = _IntervalSettingView(self.voice_manager, guild.id, current)
+        view = _IntervalSettingView(
+            self.voice_manager, self.scheduler, guild.id, current
+        )
         await interaction.response.send_message(
             f"現在の時報の間隔: 「{_interval_label(current)}」\n"
             "下のメニューから選択してください。",
