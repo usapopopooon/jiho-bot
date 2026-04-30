@@ -133,7 +133,7 @@ class JihoBot(commands.Bot):
             # ``CustomActivity`` is the only activity type that renders
             # without a leading prefix ("プレイ中" / "Watching" 等). The
             # name we pass becomes the entire visible status text.
-            activity=discord.CustomActivity(name="時間を数え中"),
+            activity=discord.CustomActivity(name="時間を数えています"),
         )
         self._settings = settings
         self.voice_manager: VoiceManager = VoiceManager()
