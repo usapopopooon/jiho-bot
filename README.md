@@ -6,8 +6,8 @@
 
 ## 仕組み
 
-- `/jiho` — トグルコマンド。未接続なら呼び出した人の VC に参加、接続済みなら切断
-- `/setting` — 時報の間隔をドロップダウンから選択 (毎時0分・30分(既定) / 毎時0分のみ / 10分ごと)。guild ごとに保持され、切断/再接続では保たれる(再起動で消える)
+- `/jiho` — トグルコマンド。未接続なら呼び出した人の VC に参加 (参加直後に `connected.wav`「時報を開始するのだ」)、接続済みなら切断
+- `/setting` — 時報の間隔をドロップダウンから選択 (毎時0分・30分(既定) / 毎時0分のみ / 10分ごと)。VC 接続中なら確認音 `interval_<N>.wav`「N分ごとに変更したのだ」を再生。設定は guild ごとに保持され、切断/再接続では保たれる(再起動で消える)
 - 内部スケジューラがタイムゾーン (`JIHO_TIMEZONE`、既定 `Asia/Tokyo`) の境界に起き、各 guild の設定に応じて `voices/<hour>[_<minute>].wav` を再生
 - 状態は in-memory のみ。再起動で VC 接続も interval 設定も失われる
 
@@ -24,7 +24,7 @@ docker compose -f docker-compose.gen.yml up --build \
     --abort-on-container-exit --exit-code-from gen
 ```
 
-`voices/` 以下に **144 ファイル** 一括で生成される(48kHz / stereo / 16bit。
+`voices/` 以下に **148 ファイル** 一括で生成される(48kHz / stereo / 16bit。
 ffmpeg を経由せず `discord.PCMAudio` でそのまま流せる形式)。
 
 | パターン | ファイル | 既定読み |
@@ -32,6 +32,8 @@ ffmpeg を経由せず `discord.PCMAudio` でそのまま流せる形式)。
 | `<hour>.wav` | 24 個 (0〜23時) | 「午前/午後X時になったのだ」 |
 | `<hour>_30.wav` | 24 個 | 「午前/午後X時半なのだ」 |
 | `<hour>_10/20/40/50.wav` | 96 個 | 「午前/午後X時Y分なのだ」 |
+| `connected.wav` | 1 個 | 「時報を開始するのだ」 (`/jiho` で接続時) |
+| `interval_60/30/10.wav` | 3 個 | 「N分(or1時間)ごとに変更したのだ」 (`/setting` 変更時) |
 
 既存の wav はスキップされる。再生成したいときは:
 
@@ -50,7 +52,7 @@ pip install -e '.[gen]'
 python scripts/generate_voices.py
 ```
 
-オプション:
+オプション (全て CLI フラグで上書き可能、`GEN_ARGS` 経由で compose にも渡せる):
 
 | 引数 | 既定 | 説明 |
 |---|---|---|
@@ -59,8 +61,11 @@ python scripts/generate_voices.py
 | `--template` | `{period}{hour12}時になったのだ` | :00 用テンプレ。`{period}`=午前/午後、`{hour12}`=0..11、`{hour}`=0..23 |
 | `--template-half` | `{period}{hour12}時半なのだ` | :30 用テンプレ |
 | `--template-minute` | `{period}{hour12}時{minute}分なのだ` | :10/:20/:40/:50 用。`{minute}` も使える |
+| `--text-connected` | `時報を開始するのだ` | `/jiho` 接続時の `connected.wav` (テンプレ変数なし、そのまま読み上げ) |
+| `--text-interval-60` | `1時間ごとに変更したのだ` | `/setting` で 60 分にしたときの `interval_60.wav` |
+| `--text-interval-30` | `30分ごとに変更したのだ` | `/setting` で 30 分にしたときの `interval_30.wav` |
+| `--text-interval-10` | `10分ごとに変更したのだ` | `/setting` で 10 分にしたときの `interval_10.wav` |
 | `--out-dir` | `voices/` | 出力ディレクトリ |
-| `--start` / `--end` | `0` / `23` | 部分的に再生成したいときの範囲 |
 | `--force` | off | 既存の wav を上書き |
 | `--wait-seconds` | `15` | エンジン起動待ちの最大秒数 (compose では 90 を渡している) |
 
@@ -108,7 +113,7 @@ src/
 └── voice_manager.py # ギルド単位の VC 接続 / play / disconnect / interval
 scripts/
 └── generate_voices.py # ローカル専用: VOICEVOX → voices/*.wav 一括生成
-voices/                # 144 wavs (Docker イメージへ COPY される)
+voices/                # 148 wavs (時報144 + connected/interval_*) — Docker イメージへ COPY
 tests/
 ```
 

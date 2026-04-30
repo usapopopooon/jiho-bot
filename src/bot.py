@@ -78,6 +78,11 @@ class _IntervalSelect(discord.ui.Select["_IntervalSettingView"]):
             f"時報の間隔を「{_interval_label(minutes)}」に変更しました。",
             ephemeral=True,
         )
+        # Cue the change in VC if connected. ``play_clip`` is best-effort
+        # — a missing wav (e.g. user re-deployed without re-rendering)
+        # logs a warning and is a no-op instead of crashing the callback.
+        if self._voice_manager.is_connected(self._guild_id):
+            await self._voice_manager.play_clip(self._guild_id, f"interval_{minutes}")
 
 
 class _IntervalSettingView(discord.ui.View):
@@ -194,6 +199,10 @@ class JihoBot(commands.Bot):
             f"「{_interval_label(current)}」 (`/setting` で変更できます)",
             ephemeral=True,
         )
+        # Greet the channel after the followup is on its way so the
+        # spinner doesn't hang while audio plays. ``play_clip`` is
+        # best-effort and short (~1.5s for the connected cue).
+        await self.voice_manager.play_clip(guild.id, "connected")
 
     # ------------------------------------------------------------------
     # /setting — open the interval-picker dropdown

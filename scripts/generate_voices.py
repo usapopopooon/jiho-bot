@@ -14,8 +14,10 @@ Output is always the full set so any ``/jiho interval:`` choice (60 /
 - ``voices/<H>.wav``       for HH:00      (24 files)   — "X時になったのだ"
 - ``voices/<H>_30.wav``    for HH:30      (24 files)   — "X時半なのだ"
 - ``voices/<H>_<M>.wav``   for HH:10/20/40/50  (96 files) — "X時M分なのだ"
+- ``voices/connected.wav`` (1 file) — VC 接続時の挨拶
+- ``voices/interval_<N>.wav`` (3 files) — ``/setting`` 変更時の確認音
 
-= 144 WAVs in 48kHz/stereo/16bit so :class:`discord.PCMAudio` can play
+= 148 WAVs in 48kHz/stereo/16bit so :class:`discord.PCMAudio` can play
 them without shelling out to ffmpeg.
 
 Speaker 3 is VOICEVOX's ずんだもん (ノーマル). To use a different style
@@ -44,6 +46,17 @@ DEFAULT_SPEAKER = 3  # VOICEVOX: ずんだもん (ノーマル)
 DEFAULT_TEMPLATE = "{period}{hour12}時になったのだ"
 DEFAULT_TEMPLATE_HALF = "{period}{hour12}時半なのだ"
 DEFAULT_TEMPLATE_MINUTE = "{period}{hour12}時{minute}分なのだ"
+
+# Static (non-time) clips played by the bot. Stem → default text. The
+# bot resolves these by name (``play_clip("connected")``,
+# ``play_clip("interval_30")``, …), so renaming requires a matching
+# update there.
+DEFAULT_STATIC_CLIPS: dict[str, str] = {
+    "connected": "時報を開始するのだ",
+    "interval_60": "1時間ごとに変更したのだ",
+    "interval_30": "30分ごとに変更したのだ",
+    "interval_10": "10分ごとに変更したのだ",
+}
 
 DEFAULT_OUT_DIR = Path(__file__).resolve().parent.parent / "voices"
 
@@ -150,11 +163,14 @@ def build_jobs(
     template_hour: str,
     template_half: str,
     template_minute: str,
+    static_clips: dict[str, str] | None = None,
 ) -> list[tuple[str, str]]:
     """Return ``(file_stem, text)`` for every clip the bot might play.
 
     Stems: ``"<hour>"`` for the hour clip, ``"<hour>_<minute>"`` for the
-    rest. Final path is ``out_dir / f"{stem}.wav"``.
+    minute marks, plus any static clips (``"connected"``, …) appended
+    last so a partial run still gets the time signals first. Final path
+    is ``out_dir / f"{stem}.wav"``.
     """
     jobs: list[tuple[str, str]] = []
     for hour in range(24):
@@ -176,6 +192,10 @@ def build_jobs(
                     render_text(template_minute, hour, minute),
                 )
             )
+    # Static clips don't use the hour/period templates — they're plain
+    # text the user can override per-clip from the CLI.
+    for stem, text in (static_clips or {}).items():
+        jobs.append((stem, text))
     return jobs
 
 
@@ -183,7 +203,18 @@ async def _amain(args: argparse.Namespace) -> int:
     out_dir: Path = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    jobs = build_jobs(args.template, args.template_half, args.template_minute)
+    static_clips = {
+        "connected": args.text_connected,
+        "interval_60": args.text_interval_60,
+        "interval_30": args.text_interval_30,
+        "interval_10": args.text_interval_10,
+    }
+    jobs = build_jobs(
+        args.template,
+        args.template_half,
+        args.template_minute,
+        static_clips,
+    )
     logger.info(
         "rendering %d clips engine=%s speaker=%d out=%s",
         len(jobs),
@@ -247,6 +278,38 @@ def main() -> int:
         help=(
             ":10/:20/:40/:50 用テンプレ。{minute} 変数も使える "
             "(10/20/40/50 が入る)。Default: %(default)r"
+        ),
+    )
+    parser.add_argument(
+        "--text-connected",
+        default=DEFAULT_STATIC_CLIPS["connected"],
+        help=(
+            "VC 接続時に流す connected.wav のテキスト (時刻系のテンプレ変数は"
+            "使えない、そのまま読み上げ)。Default: %(default)r"
+        ),
+    )
+    parser.add_argument(
+        "--text-interval-60",
+        default=DEFAULT_STATIC_CLIPS["interval_60"],
+        help=(
+            "/setting で 60 分(毎時0分)に変更したときに流す interval_60.wav の"
+            "テキスト。Default: %(default)r"
+        ),
+    )
+    parser.add_argument(
+        "--text-interval-30",
+        default=DEFAULT_STATIC_CLIPS["interval_30"],
+        help=(
+            "/setting で 30 分に変更したときに流す interval_30.wav のテキスト。"
+            "Default: %(default)r"
+        ),
+    )
+    parser.add_argument(
+        "--text-interval-10",
+        default=DEFAULT_STATIC_CLIPS["interval_10"],
+        help=(
+            "/setting で 10 分に変更したときに流す interval_10.wav のテキスト。"
+            "Default: %(default)r"
         ),
     )
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)

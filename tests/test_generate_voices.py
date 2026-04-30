@@ -6,7 +6,11 @@ import aiohttp
 import pytest
 
 from scripts.generate_voices import (
+    DEFAULT_STATIC_CLIPS,
     DEFAULT_TEMPLATE,
+    DEFAULT_TEMPLATE_HALF,
+    DEFAULT_TEMPLATE_MINUTE,
+    build_jobs,
     period_and_hour12,
     render_text,
     wait_for_engine,
@@ -42,6 +46,39 @@ def test_render_default_template() -> None:
 def test_render_custom_template_keeps_24h_var() -> None:
     """{hour} (24-hour) も使えること — カスタムテンプレ用に残してある。"""
     assert render_text("{hour}時 ({period}{hour12}時)", 13) == "13時 (午後1時)"
+
+
+# --- build_jobs --------------------------------------------------------
+
+
+def test_build_jobs_full_set_count_is_148() -> None:
+    """24 hour + 24 half + 24×4 minute + 4 static = 148 clips."""
+    jobs = build_jobs(
+        DEFAULT_TEMPLATE,
+        DEFAULT_TEMPLATE_HALF,
+        DEFAULT_TEMPLATE_MINUTE,
+        DEFAULT_STATIC_CLIPS,
+    )
+    assert len(jobs) == 148
+
+
+def test_build_jobs_includes_static_clips_at_end() -> None:
+    """Static clips append after time-signal jobs so a partial run still
+    gets the time signals first."""
+    jobs = build_jobs(
+        DEFAULT_TEMPLATE,
+        DEFAULT_TEMPLATE_HALF,
+        DEFAULT_TEMPLATE_MINUTE,
+        {"connected": "go", "interval_30": "30"},
+    )
+    last_two = [stem for stem, _ in jobs[-2:]]
+    assert sorted(last_two) == ["connected", "interval_30"]
+
+
+def test_build_jobs_static_clips_optional() -> None:
+    """No static clips → just the 144 time-signal jobs."""
+    jobs = build_jobs(DEFAULT_TEMPLATE, DEFAULT_TEMPLATE_HALF, DEFAULT_TEMPLATE_MINUTE)
+    assert len(jobs) == 144
 
 
 @pytest.mark.asyncio
