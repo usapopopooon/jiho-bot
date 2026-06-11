@@ -1,7 +1,7 @@
 [project]
 name = "jiho-bot"
 version = "0.1.0"
-description = "Discord time-signal bot — plays pre-rendered Zundamon WAVs on the hour"
+description = "Discord time-signal bot — plays pre-rendered VOICEVOX WAVs on the hour"
 requires-python = "==3.12.*"
 dependencies = [
     # ``[voice]`` pulls PyNaCl for legacy XSalsa20 modes, but Discord now

@@ -11,16 +11,17 @@ template):
 Output is always the full set so any ``/jiho interval:`` choice (60 /
 30 / 10 minutes) just works:
 
-- ``voices/<H>.wav``       for HH:00      (24 files)   — "X時になったのだ"
-- ``voices/<H>_30.wav``    for HH:30      (24 files)   — "X時半なのだ"
-- ``voices/<H>_<M>.wav``   for HH:10/20/40/50  (96 files) — "X時M分なのだ"
+- ``voices/<H>.wav``       for HH:00      (24 files)   — "X時になりました"
+- ``voices/<H>_30.wav``    for HH:30      (24 files)   — "X時半です"
+- ``voices/<H>_<M>.wav``   for HH:10/20/40/50  (96 files) — "X時M分です"
 - ``voices/connected.wav`` (1 file) — VC 接続時の挨拶
 - ``voices/interval_<N>.wav`` (3 files) — ``/setting`` 変更時の確認音
 
 = 148 WAVs in 48kHz/stereo/16bit so :class:`discord.PCMAudio` can play
 them without shelling out to ffmpeg.
 
-Speaker 3 is VOICEVOX's ずんだもん (ノーマル). To use a different style
+Speaker 46 matches voicevox-discord's default: VOICEVOX's 小夜/SAYO
+(ノーマル). To use a different style
 or text, override ``--speaker`` / ``--template*``.
 """
 
@@ -36,26 +37,26 @@ from pathlib import Path
 import aiohttp
 
 DEFAULT_ENGINE = "http://localhost:50021"
-DEFAULT_SPEAKER = 3  # VOICEVOX: ずんだもん (ノーマル)
+DEFAULT_SPEAKER = 46  # VOICEVOX: 小夜/SAYO (ノーマル)
 
 # Template variables across all three:
 #   {period} → 午前/午後
 #   {hour12} → 0..11 (mod 12; 12 maps to 0)
 #   {hour}   → 0..23 (24-hour)
 #   {minute} → only for the minute template (10/20/40/50)
-DEFAULT_TEMPLATE = "{period}{hour12}時になったのだ"
-DEFAULT_TEMPLATE_HALF = "{period}{hour12}時半なのだ"
-DEFAULT_TEMPLATE_MINUTE = "{period}{hour12}時{minute}分なのだ"
+DEFAULT_TEMPLATE = "{period}{hour12}時になりました"
+DEFAULT_TEMPLATE_HALF = "{period}{hour12}時半です"
+DEFAULT_TEMPLATE_MINUTE = "{period}{hour12}時{minute}分です"
 
 # Static (non-time) clips played by the bot. Stem → default text. The
 # bot resolves these by name (``play_clip("connected")``,
 # ``play_clip("interval_30")``, …), so renaming requires a matching
 # update there.
 DEFAULT_STATIC_CLIPS: dict[str, str] = {
-    "connected": "時報を開始するのだ",
-    "interval_60": "1時間ごとに変更したのだ",
-    "interval_30": "30分ごとに変更したのだ",
-    "interval_10": "10分ごとに変更したのだ",
+    "connected": "時報を開始します",
+    "interval_60": "1時間ごとに変更しました",
+    "interval_30": "30分ごとに変更しました",
+    "interval_10": "10分ごとに変更しました",
 }
 
 DEFAULT_OUT_DIR = Path(__file__).resolve().parent.parent / "voices"

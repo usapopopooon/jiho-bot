@@ -37,10 +37,10 @@ def test_period_and_hour12_rejects_out_of_range() -> None:
 
 
 def test_render_default_template() -> None:
-    assert render_text(DEFAULT_TEMPLATE, 0) == "午前0時になったのだ"
-    assert render_text(DEFAULT_TEMPLATE, 9) == "午前9時になったのだ"
-    assert render_text(DEFAULT_TEMPLATE, 12) == "午後0時になったのだ"
-    assert render_text(DEFAULT_TEMPLATE, 23) == "午後11時になったのだ"
+    assert render_text(DEFAULT_TEMPLATE, 0) == "午前0時になりました"
+    assert render_text(DEFAULT_TEMPLATE, 9) == "午前9時になりました"
+    assert render_text(DEFAULT_TEMPLATE, 12) == "午後0時になりました"
+    assert render_text(DEFAULT_TEMPLATE, 23) == "午後11時になりました"
 
 
 def test_render_custom_template_keeps_24h_var() -> None:
