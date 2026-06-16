@@ -87,12 +87,6 @@ docker compose up --build
 
 開発中は `.env` に `DISCORD_GUILD_IDS=<サーバ ID>` を入れるとコマンドが即時同期される。
 
-### 4. Railway
-
-1. GitHub リポジトリを連携、Root Directory はそのまま
-2. 環境変数 `DISCORD_TOKEN` を設定
-3. Push すると [railway.toml](railway.toml) → [Dockerfile](Dockerfile) で起動
-
 ## 環境変数
 
 | 変数 | 既定 | 説明 |
