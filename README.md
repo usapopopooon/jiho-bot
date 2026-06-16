@@ -95,6 +95,8 @@ docker compose up --build
 | `DISCORD_GUILD_IDS` | 空 | カンマ区切りの guild ID。指定すると即時コマンド同期 |
 | `JIHO_TIMEZONE` | `Asia/Tokyo` | 時報を打つタイムゾーン (IANA 名) |
 | `LOG_LEVEL` | `INFO` | logging レベル |
+| `MEMORY_LIMIT` | `160m` | Bot コンテナのメモリ上限。1サーバー運用向けに低め |
+| `MEMORY_RESERVATION` | `96m` | Bot コンテナのメモリ予約 |
 
 ## ディレクトリ
 

@@ -1,8 +1,8 @@
 services:
   bot:
     build: .
-    mem_limit: ${MEMORY_LIMIT:-256m}
-    mem_reservation: ${MEMORY_RESERVATION:-128m}
+    mem_limit: ${MEMORY_LIMIT:-160m}
+    mem_reservation: ${MEMORY_RESERVATION:-96m}
     environment:
       # ``DISCORD_TOKEN`` (single) and ``DISCORD_TOKENS`` (CSV) are both
       # accepted by ``src.config``; pass whichever the user set. The
