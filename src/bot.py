@@ -183,10 +183,10 @@ class JihoBot(commands.Bot):
 
         Without this, the bot would broadcast to an empty channel forever
         after everyone goes to bed. We don't say goodbye — just leave
-        quietly. Triggered for the *human's* state change, not the bot's,
-        so we early-return on our own id.
+        quietly. Usually this is triggered by a human leaving; self-events
+        are only considered when Discord moves the bot into another VC.
         """
-        if self.user is None or member.id == self.user.id:
+        if self.user is None:
             return
         if not self.voice_manager.is_connected(member.guild.id):
             return
@@ -199,11 +199,32 @@ class JihoBot(commands.Bot):
         bot_channel = getattr(voice_client, "channel", None)
         if bot_channel is None:
             return
+        bot_channel_id = getattr(bot_channel, "id", None)
 
-        # We only care when someone *left* (or moved away from) our
-        # channel. Joining, mute toggles, camera flips all leave
+        # We only care when someone *left* (or moved away from) our channel,
+        # plus the special case where this bot was moved into a bot-only VC.
+        # Joining, mute toggles, camera flips all leave
         # ``before.channel == after.channel`` and don't matter here.
-        if before.channel != bot_channel or after.channel == bot_channel:
+        was_in_bot_channel = (
+            before.channel is not None
+            and getattr(before.channel, "id", None) == bot_channel_id
+        )
+        still_in_bot_channel = (
+            after.channel is not None
+            and getattr(after.channel, "id", None) == bot_channel_id
+        )
+        if member.id == self.user.id:
+            # A normal /jiho join fires our own voice-state event before the
+            # cache can be trusted everywhere. Only treat self-events as a
+            # bot-only signal when someone moved us from another VC.
+            moved_into_bot_channel = (
+                before.channel is not None
+                and still_in_bot_channel
+                and not was_in_bot_channel
+            )
+            if not moved_into_bot_channel:
+                return
+        elif not was_in_bot_channel or still_in_bot_channel:
             return
 
         humans_left = [m for m in bot_channel.members if not m.bot]

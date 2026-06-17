@@ -237,8 +237,7 @@ async def test_no_disconnect_when_humans_remain() -> None:
 
 @pytest.mark.asyncio
 async def test_no_disconnect_on_bot_own_event() -> None:
-    """The bot's own state changes (joining / moving) must not trigger
-    the auto-disconnect path."""
+    """The bot's initial join must not trigger the auto-disconnect path."""
     bot = _make_bot()
     channel = _channel(123, members=[])
     bot.voice_manager.is_connected = MagicMock(return_value=True)
@@ -247,6 +246,23 @@ async def test_no_disconnect_on_bot_own_event() -> None:
     await bot.on_voice_state_update(me, _voice_state(None), _voice_state(channel))
 
     bot.voice_manager.disconnect.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_auto_disconnect_when_bot_moved_into_bot_only_channel() -> None:
+    bot = _make_bot()
+    bot_self = _bot_member(999)
+    old_channel = _channel(456, members=[_human(8)])
+    new_channel = _channel(123, members=[bot_self])
+    bot.voice_manager.is_connected = MagicMock(return_value=True)
+
+    me = _member_event(999, guild_id=10, voice_channel=new_channel, is_bot=True)
+    await bot.on_voice_state_update(
+        me, _voice_state(old_channel), _voice_state(new_channel)
+    )
+
+    bot.voice_manager.disconnect.assert_awaited_once_with(10)
+    bot.scheduler.wake.assert_called_once()
 
 
 @pytest.mark.asyncio
